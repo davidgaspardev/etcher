@@ -61,6 +61,7 @@ import ImageSvg from '../../../assets/image.svg';
 import SrcSvg from '../../../assets/src.svg';
 import { DriveSelector } from '../drive-selector/drive-selector';
 import { DrivelistDrive } from '../../../../shared/drive-constraints';
+import axios, { AxiosRequestConfig } from 'axios';
 
 const recentUrlImagesKey = 'recentUrlImages';
 
@@ -333,13 +334,31 @@ export class SourceSelector extends React.Component<
 		} catch (error) {
 			analytics.logException(error);
 		}
-
+	
+		if (this.isJson(decodeURIComponent(selected))) {
+			const config: AxiosRequestConfig = JSON.parse(decodeURIComponent(selected));
+			return new sourceDestination.Http({
+				url: config.url!,
+				axiosInstance: axios.create(_.omit(config, ['url'])),
+			});
+		}
+	
 		if (SourceType === sourceDestination.File) {
 			return new sourceDestination.File({
 				path: selected,
 			});
 		}
+		
 		return new sourceDestination.Http({ url: selected });
+	}
+
+	public isJson(string: string) {
+		try {
+			JSON.parse(string);
+		} catch (e) {
+			return false;
+		}
+		return true;
 	}
 
 	private reselectSource() {
