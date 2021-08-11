@@ -418,7 +418,7 @@ export class SourceSelector extends React.Component<
 						}
 						metadata.SourceType = SourceType;
 
-						if (!metadata.hasMBR) {
+						if (!metadata.hasMBR && this.state.warning === null) {
 							analytics.logEvent('Missing partition table', { metadata });
 							this.setState({
 								warning: {
