@@ -61,6 +61,7 @@ import ImageSvg from '../../../assets/image.svg';
 import SrcSvg from '../../../assets/src.svg';
 import { DriveSelector } from '../drive-selector/drive-selector';
 import { DrivelistDrive } from '../../../../shared/drive-constraints';
+import axios, { AxiosRequestConfig } from 'axios';
 
 const recentUrlImagesKey = 'recentUrlImages';
 
@@ -279,6 +280,7 @@ interface SourceSelectorState {
 	showDriveSelector: boolean;
 	defaultFlowActive: boolean;
 	imageSelectorOpen: boolean;
+	imageLoading: boolean;
 }
 
 export class SourceSelector extends React.Component<
@@ -297,6 +299,7 @@ export class SourceSelector extends React.Component<
 			showDriveSelector: false,
 			defaultFlowActive: true,
 			imageSelectorOpen: false,
+			imageLoading: false,
 		};
 
 		// Bind `this` since it's used in an event's callback
@@ -317,10 +320,12 @@ export class SourceSelector extends React.Component<
 	}
 
 	private async onSelectImage(_event: IpcRendererEvent, imagePath: string) {
+		this.setState({ imageLoading: true });
 		await this.selectSource(
 			imagePath,
 			isURL(imagePath) ? sourceDestination.Http : sourceDestination.File,
 		).promise;
+		this.setState({ imageLoading: false });
 	}
 
 	private async createSource(selected: string, SourceType: Source) {
@@ -335,7 +340,20 @@ export class SourceSelector extends React.Component<
 				path: selected,
 			});
 		}
-		return new sourceDestination.Http({ url: selected });
+		const splitUrl = selected.split('?');
+		const url = splitUrl.slice(0, splitUrl.length - 1).join('');
+		const queryParams = splitUrl.length > 1 && splitUrl[splitUrl.length - 1];
+		const urlSearchParams = !!queryParams
+			? new URLSearchParams(queryParams)
+			: undefined;
+		const params: AxiosRequestConfig | undefined = !!urlSearchParams
+			? Object.fromEntries(urlSearchParams.entries())
+			: undefined;
+		const config = params ?? {};
+		return new sourceDestination.Http({
+			url,
+			axiosInstance: axios.create(config),
+		});
 	}
 
 	private reselectSource() {
@@ -395,7 +413,7 @@ export class SourceSelector extends React.Component<
 						}
 						metadata.SourceType = SourceType;
 
-						if (!metadata.hasMBR) {
+						if (!metadata.hasMBR && this.state.warning === null) {
 							analytics.logEvent('Missing partition table', { metadata });
 							this.setState({
 								warning: {
@@ -567,7 +585,12 @@ export class SourceSelector extends React.Component<
 	// TODO add a visual change when dragging a file over the selector
 	public render() {
 		const { flashing } = this.props;
-		const { showImageDetails, showURLSelector, showDriveSelector } = this.state;
+		const {
+			showImageDetails,
+			showURLSelector,
+			showDriveSelector,
+			imageLoading,
+		} = this.state;
 		const selectionImage = selectionState.getImage();
 		let image: SourceMetadata | DrivelistDrive =
 			selectionImage !== undefined ? selectionImage : ({} as SourceMetadata);
@@ -605,16 +628,18 @@ export class SourceSelector extends React.Component<
 						}}
 					/>
 
-					{selectionImage !== undefined ? (
+					{selectionImage !== undefined || imageLoading ? (
 						<>
 							<StepNameButton
 								plain
 								onClick={() => this.showSelectedImageDetails()}
 								tooltip={imageName || imageBasename}
 							>
-								{middleEllipsis(imageName || imageBasename, 20)}
+								<Spinner show={imageLoading}>
+									{middleEllipsis(imageName || imageBasename, 20)}
+								</Spinner>
 							</StepNameButton>
-							{!flashing && (
+							{!flashing && !imageLoading && (
 								<ChangeButton
 									plain
 									mb={14}
@@ -623,7 +648,7 @@ export class SourceSelector extends React.Component<
 									Remove
 								</ChangeButton>
 							)}
-							{!_.isNil(imageSize) && (
+							{!_.isNil(imageSize) && !imageLoading && (
 								<DetailsText>{prettyBytes(imageSize)}</DetailsText>
 							)}
 						</>
